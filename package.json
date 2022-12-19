@@ -1,0 +1,30 @@
+{
+	"name": "kirakira-profile-markdown",
+	"version": "1.0.0",
+	"description": "Provide additional Markdown syntax parsing for KIRAKIRA profile pages.",
+	"main": "index.js",
+	"scripts": {
+		"test": "jest"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/KIRAKIRA-DOUGA/KIRAKIRA-Profile-Markdown.git"
+	},
+	"author": "",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/KIRAKIRA-DOUGA/KIRAKIRA-Profile-Markdown/issues"
+	},
+	"homepage": "https://github.com/KIRAKIRA-DOUGA/KIRAKIRA-Profile-Markdown#readme",
+	"devDependencies": {
+		"@types/jest": "^29.2.4",
+		"@types/marked": "^4.0.8",
+		"@typescript-eslint/eslint-plugin": "^5.46.1",
+		"eslint": "^8.30.0",
+		"jest": "^29.3.1",
+		"ts-jest": "^29.0.3"
+	},
+	"dependencies": {
+		"marked": "^4.2.4"
+	}
+}
