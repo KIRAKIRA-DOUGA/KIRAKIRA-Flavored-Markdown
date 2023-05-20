@@ -88,7 +88,7 @@ module.exports = {
 		"no-loss-of-precision": "error",
 		"no-useless-concat": "error",
 		"object-shorthand": "error",
-		"prefer-template": "warn",
+		"prefer-template": "off",
 		"template-curly-spacing": "error",
 		"multiline-ternary": "off",
 		"operator-linebreak": "off",
