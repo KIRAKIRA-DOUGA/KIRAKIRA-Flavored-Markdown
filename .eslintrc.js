@@ -25,7 +25,7 @@ module.exports = {
 			"flatTernaryExpressions": true,
 		}],
 		"linebreak-style": ["error", "unix"],
-		"quotes": ["error", "double"],
+		"quotes": ["error", "double", { "avoidEscape": true }],
 		"semi": ["error", "always"],
 		"array-bracket-spacing": ["error", "never"],
 		"brace-style": ["error", "1tbs", { "allowSingleLine": true }],

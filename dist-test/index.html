@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+	<meta charset="UTF-8">
+	<title>KIRAKIRA-Flavored-Markdown</title>
+	<style>
+		body {
+			padding: 0.5rem;
+		}
+
+		.container {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+		}
+
+		.container > * {
+			border: 1px solid lightgray;
+			border-radius: 6px;
+			min-height: 7em;
+			padding: 0.5rem;
+		}
+
+		textarea {
+			resize: vertical;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<textarea id="md-edit"></textarea>
+		<code id="html-preview"></code>
+		<div id="result-preview"></div>
+	</div>
+
+	<script src="./markdown-it.min.js"></script>
+	<script src="./index.js"></script>
+</body>
+
+</html>
