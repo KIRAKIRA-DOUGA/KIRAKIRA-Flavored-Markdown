@@ -2890,6 +2890,10 @@
   Parser.parse;
   Lexer.lex;
 
+  marked.use({
+      breaks: true,
+      gfm: true,
+  });
   const mdEdit = document.getElementById("md-edit");
   const htmlPreview = document.getElementById("html-preview");
   const resultPreview = document.getElementById("result-preview");

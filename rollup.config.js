@@ -3,7 +3,7 @@ import nodeResolve from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import copy from "rollup-plugin-copy";
-import pkg from "./package.json" assert { type: "json" };
+// import pkg from "./package.json" assert { type: "json" };
 
 const enableTerser = false;
 
@@ -15,7 +15,7 @@ const banner = `/**
 export default {
 	input: "test/browser.marked.test.ts",
 	output: {
-		file: "./dist-test/index.js",
+		file: "./dist/index.js",
 		format: "iife",
 		banner,
 	},
@@ -28,7 +28,7 @@ export default {
 		commonjs(),
 		copy({
 			targets: [
-				{ src: "public/*", dest: "dist-test" },
+				{ src: "public/*", dest: "dist" },
 			],
 		}),
 		typescript({

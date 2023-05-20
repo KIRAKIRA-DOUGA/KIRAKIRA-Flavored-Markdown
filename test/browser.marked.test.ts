@@ -1,5 +1,10 @@
 import { marked } from "marked";
 
+marked.use({
+	breaks: true,
+	gfm: true,
+});
+
 const mdEdit = document.getElementById("md-edit") as HTMLTextAreaElement;
 const htmlPreview = document.getElementById("html-preview")!;
 const resultPreview = document.getElementById("result-preview")!;
