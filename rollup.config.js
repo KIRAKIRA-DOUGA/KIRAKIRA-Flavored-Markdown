@@ -1,3 +1,5 @@
+import commonjs from "@rollup/plugin-commonjs";
+import nodeResolve from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import copy from "rollup-plugin-copy";
@@ -11,7 +13,7 @@ const banner = `/**
 `;
 
 export default {
-	input: "test/browser.markdown-it.test.ts",
+	input: "test/browser.marked.test.ts",
 	output: {
 		file: "./dist-test/index.js",
 		format: "iife",
@@ -19,6 +21,8 @@ export default {
 	},
 	external: Object.keys(pkg.dependencies),
 	plugins: [
+		nodeResolve(),
+		commonjs(),
 		copy({
 			targets: [
 				{ src: "public/*", dest: "dist-test" },
