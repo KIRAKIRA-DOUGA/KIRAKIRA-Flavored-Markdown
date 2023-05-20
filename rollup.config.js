@@ -1,7 +1,7 @@
-import pkg from "./package.json" assert { type: "json" };
+import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import copy from "rollup-plugin-copy";
-import terser from "@rollup/plugin-terser";
+import pkg from "./package.json" assert { type: "json" };
 
 const enableTerser = false;
 
@@ -11,7 +11,7 @@ const banner = `/**
 `;
 
 export default {
-	input: "test/test-browser.ts",
+	input: "test/browser.markdown-it.test.ts",
 	output: {
 		file: "./dist-test/index.js",
 		format: "iife",
