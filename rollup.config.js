@@ -19,7 +19,10 @@ export default {
 		format: "iife",
 		banner,
 	},
-	external: Object.keys(pkg.dependencies),
+	onwarn(warning) {
+		console.warn(warning.message);
+	},
+	// external: Object.keys(pkg.dependencies),
 	plugins: [
 		nodeResolve(),
 		commonjs(),

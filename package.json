@@ -3,8 +3,12 @@
 	"version": "1.0.0",
 	"description": "Provide additional Markdown syntax parsing for KIRAKIRA profile pages.",
 	"main": "index.js",
+	"type": "module",
 	"scripts": {
-		"test": "jest"
+		"test": "jest",
+		"tsc": "tsc",
+		"build": "rollup -c",
+		"watch": "rollup -cw"
 	},
 	"repository": {
 		"type": "git",
