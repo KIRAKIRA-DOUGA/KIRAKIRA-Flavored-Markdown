@@ -1,5 +1,6 @@
-import { marked } from "marked";
+import MarkdownIt from "markdown-it";
+const md = new MarkdownIt();
 
 test("marked", () => {
-	expect(marked.parse("**hello world**")).toBe("<p><strong>hello world</strong></p>");
+	expect(md.render("**hello world**")).toBe("<p><strong>hello world</strong></p>");
 });
