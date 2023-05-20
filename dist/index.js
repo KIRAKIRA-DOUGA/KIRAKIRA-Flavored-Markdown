@@ -2890,10 +2890,63 @@
   Parser.parse;
   Lexer.lex;
 
+  function highlight () {
+      return {
+          extensions: [{
+                  name: "highlight",
+                  level: "inline",
+                  start(src) { return src.indexOf("="); },
+                  tokenizer(src, tokens) {
+                      console.log(src, tokens);
+                      const rule = /^==(.+?)==/;
+                      const match = rule.exec(src);
+                      if (!match)
+                          return;
+                      const content = match[1];
+                      return {
+                          type: "highlight",
+                          raw: match[0],
+                          content,
+                      };
+                  },
+                  renderer(token) {
+                      return `<mark>${token.content}</mark>`;
+                  },
+              }],
+      };
+  }
+
+  function underline () {
+      return {
+          extensions: [{
+                  name: "underline",
+                  level: "inline",
+                  start(src) { return src.indexOf("_"); },
+                  tokenizer(src, tokens) {
+                      console.log(src, tokens);
+                      const rule = /^_(.+?)_/;
+                      const match = rule.exec(src);
+                      if (!match)
+                          return;
+                      const content = match[1];
+                      return {
+                          type: "underline",
+                          raw: match[0],
+                          content,
+                      };
+                  },
+                  renderer(token) {
+                      return `<u>${token.content}</u>`;
+                  },
+              }],
+      };
+  }
+
   marked.use({
       breaks: true,
       gfm: true,
   });
+  marked.use(underline(), highlight());
   const mdEdit = document.getElementById("md-edit");
   const htmlPreview = document.getElementById("html-preview");
   const resultPreview = document.getElementById("result-preview");

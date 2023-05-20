@@ -1,23 +1,23 @@
 export default function (): MarkedExtension {
 	return {
 		extensions: [{
-			name: "underline",
+			name: "highlight",
 			level: "inline",
-			start(src) { return src.indexOf("_"); },
+			start(src) { return src.indexOf("="); },
 			tokenizer(src, tokens) {
 				console.log(src, tokens);
-				const rule = /^_(.+?)_/;
+				const rule = /^==(.+?)==/;
 				const match = rule.exec(src);
 				if (!match) return;
 				const content = match[1];
 				return {
-					type: "underline",
+					type: "highlight",
 					raw: match[0],
 					content,
 				};
 			},
 			renderer(token) {
-				return `<u>${token.content}</u>`;
+				return `<mark>${token.content}</mark>`;
 			},
 		}],
 	};
