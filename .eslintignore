@@ -1,2 +1,4 @@
 dist/**/*.js
 dist/**/*.ts
+dist-test/**/*.js
+dist-test/**/*.ts
