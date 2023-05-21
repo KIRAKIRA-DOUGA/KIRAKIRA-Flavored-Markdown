@@ -5,14 +5,16 @@
 (function () {
     'use strict';
 
+    const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
     function parse(html) {
-        const lines = (html + "\n") // 文件末尾空行
+        const lines = (html + "\n".repeat(2)) // 文件末尾空行
+            .replaceAll(/\n{3,}/g, "\n\n") // 移除多余的换行
             .replaceAll(/<!--.*?-->/g, "") // 移除注释
             .replaceAll(/</g, "&lt;") // 转义左尖括号/小于号
             .split("\n");
-        let result = "";
-        let bold = false, italic = false, underline = false, highlight = false, superscript = false, subscript = false, strikethrough = false, inlineCode = false, keyboard = false, spoiler = false, color = false, quoteLayer = 0;
-        const listLayer = [];
+        const result = [];
+        let bold = false, italic = false, underline = false, highlight = false, superscript = false, subscript = false, strikethrough = false, inlineCode = false, keyboard = false, spoiler = false, quoteLayer = 0, addedBr = "";
+        const listLayer = [], spanLayer = [];
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
             let line = lines[lineIndex];
             let lineResult = "", lineStack = "";
@@ -24,15 +26,17 @@
                 indent = spaceCount + tabCount * 2;
                 return "";
             }).trim();
-            if (line.at(-1) === "\\")
-                ; // 反斜杠在行末尾，表示不换行。
             // 分割线
             if (line.match(/^-{3,}$/)) {
-                result += "<hr>\n";
+                result.push("<hr>\n");
                 continue;
             }
             let prevFirstChar = "", usedHeading = false, usedList = false, paraTimes = 0;
-            // 段落样式
+            const lastLine = lines[lineIndex - 1]?.replaceAll(">", "").trim(), nextLine = lines[lineIndex + 1]?.replaceAll(">", "").trim();
+            const getQuoteLayer = (s) => countChar(s?.match(/^[>\s]*/)?.[0], ">");
+            const lastQuoteLayer = getQuoteLayer(lines[lineIndex - 1]), nextQuoteLayer = getQuoteLayer(lines[lineIndex + 1]);
+            const paraStart = () => lastQuoteLayer !== quoteLayer || !lastLine || !addedBr, paraEnd = () => nextQuoteLayer !== quoteLayer || !nextLine || !!nextLine.match(ulRegexp) || !!nextLine.match(olRegexp) || !!nextLine.match(headingRegexp);
+            // 段落格式
             while (true) {
                 const firstChar = line[0];
                 if (prevFirstChar === firstChar || usedHeading)
@@ -54,7 +58,6 @@
                     }
                 // 列表
                 if (firstChar === "*" || "0123456789".includes(firstChar) || listLayer.length && !paraTimes) {
-                    const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/;
                     const isUl = !!line.match(ulRegexp), isOl = !!line.match(olRegexp);
                     if (isUl || isOl) {
                         const listIndent = Math.floor(indent / 2) + 1;
@@ -79,21 +82,28 @@
                             lineResult += "<ol>\n".repeat(differ);
                             listLayer.push(...Array(differ).fill("ol"));
                         }
-                        lineResult += "<li>";
-                        lineStack = "</li>" + lineStack;
+                        if (!addedBr)
+                            lineResult += "<li>";
+                        if (paraEnd())
+                            lineStack = "</li>" + lineStack;
+                        else {
+                            if (line.at(-1) !== "\\")
+                                lineStack = "<br>" + lineStack;
+                            addedBr = "li";
+                        }
                         usedList = true;
                         if (isUl)
                             line = line.replace(ulRegexp, "");
                         else if (isOl)
                             line = line.replace(olRegexp, "");
                     }
-                    else
+                    else if (paraStart())
                         while (listLayer.length)
                             lineResult += `</${listLayer.pop()}>\n`;
                 }
                 // 段落
                 if (firstChar === "#")
-                    line = line.replace(/^#+\s+|^#+$/, hash => {
+                    line = line.replace(headingRegexp, hash => {
                         const hashCount = hash.trimEnd().length;
                         lineResult += `<h${hashCount}>`;
                         lineStack = `</h${hashCount}>` + lineStack;
@@ -102,21 +112,29 @@
                     });
                 paraTimes++;
             }
+            // 普通段落
             if (!usedHeading && !usedList && line.length !== 0) {
-                lineResult += "<p>";
-                lineStack = "</p>" + lineStack;
+                if (paraStart()) {
+                    lineResult += "<p>";
+                    addedBr = "";
+                }
+                if (paraEnd()) {
+                    lineStack = `</${addedBr || "p"}>` + lineStack;
+                    addedBr = "";
+                }
+                else {
+                    if (line.at(-1) !== "\\")
+                        lineStack = "<br>" + lineStack;
+                    addedBr ||= "p";
+                }
             }
             line = line.trim();
-            // 段落标签
+            // 块级样式
             if (line[0] === "{")
                 line = line.replace(/^{[A-Za-z0-9-_.# ]*}\s*/, brace => {
-                    const { id, classes } = readSelector(brace);
-                    if (lineResult.at(-1) === ">" && lineResult.match(/<[A-Za-z0-9-]+>$/)) {
-                        let attrs = "";
-                        if (id)
-                            attrs += ` id="${id}"`;
-                        if (classes.length)
-                            attrs += ` class="${classes.join(" ")}"`;
+                    const selector = readSelector(brace);
+                    if (selector && lineResult.at(-1) === ">" && lineResult.match(/<[A-Za-z0-9-]+>$/)) {
+                        const attrs = getSelectorAttrs(selector);
                         lineResult = lineResult.replace(/\b(?=>$)/, attrs);
                     }
                     return "";
@@ -130,6 +148,8 @@
                     const escaped = line[charIndex];
                     if (escaped === undefined)
                         continue;
+                    else if (escaped === "n") // `\n`，表示显式插入一个换行，用于在标题插入换行等迷惑行为。
+                        lineResult += "<br>";
                     else if (escaped === "/") // `\/`，表示插入一个 <wbr> 零宽空格，用于拆分语法容易混淆的语句。
                         lineResult += "<wbr>";
                     else if (" *_=~^`!".includes(escaped)) { // 反斜杠后任意个数特殊字符，表示保留这些个数的字符。
@@ -227,17 +247,12 @@
                     charIndex += 1;
                     continue;
                 }
-                // 颜色
+                // 颜色、行内样式
                 if (tryRead("$", line, charIndex)) {
-                    if (color) {
-                        color = !color;
-                        lineResult += "</span>";
-                        continue;
-                    }
-                    if (tryRead("$\\color{", line, charIndex) && !color) {
-                        const brace = readBrace(line, charIndex + 7);
+                    if (tryRead("$color{", line, charIndex)) {
+                        const brace = readBrace(line, charIndex + "$color".length);
                         if (brace) {
-                            color = !color;
+                            spanLayer.push("color");
                             charIndex = brace.newIndex;
                             let tag = "<span";
                             const [textColor, backgroundColor] = brace.result;
@@ -253,13 +268,28 @@
                             continue;
                         }
                     }
+                    else if (tryRead("$attr{", line, charIndex)) {
+                        const selector = readSelector(line, charIndex + "$attr".length);
+                        if (selector) {
+                            spanLayer.push("attr");
+                            charIndex = selector.newIndex;
+                            const tag = `<span${getSelectorAttrs(selector)}>`;
+                            lineResult += tag;
+                            continue;
+                        }
+                    }
+                    if (spanLayer.length) {
+                        lineResult += "</span>";
+                        spanLayer.pop();
+                        continue;
+                    }
                 }
                 lineResult += char;
             }
-            lineResult += lineStack + "\n";
-            result += lineResult;
+            lineResult += lineStack;
+            result.push(lineResult);
         }
-        return result.replaceAll(/[ \t]+/g, " ");
+        return result.join("\n").replaceAll(/[ \t]+/g, " ").replaceAll(/\n+/g, "\n").replace(/\n+$/, "");
     }
     function tryRead(expect, text, currentIndex) {
         return text.slice(currentIndex).startsWith(expect);
@@ -274,10 +304,15 @@
         return count;
     }
     function countChar(str, char) {
+        if (!str)
+            return 0;
         return (str.match(new RegExp(char, "g")) || []).length;
     }
+    function checkBraceValid(text, currentIndex = 0) {
+        return text.slice(currentIndex).match(/^{{(?!{).*?(?<!})}}|^{(?!{).*?(?<!})}/)?.[0];
+    }
     function readBrace(text, currentIndex, sep = "|") {
-        let brace = text.slice(currentIndex).match(/^{{(?!{).*?(?<!})}}|^{(?!{).*?(?<!})}/)?.[0];
+        let brace = checkBraceValid(text, currentIndex);
         if (!brace)
             return null;
         const newIndex = currentIndex + brace.length - 1;
@@ -292,11 +327,24 @@
             return null;
         return { result, newIndex };
     }
-    function readSelector(text) {
+    function readSelector(text, currentIndex = 0) {
+        text = checkBraceValid(text, currentIndex);
+        if (!text)
+            return null;
         return {
             id: text.match(/#[A-Za-z0-9-_]+/)?.[0].slice(1),
             classes: [...text.match(/\.[A-Za-z0-9-_]+/g) ?? []].map(i => i.slice(1)),
+            newIndex: currentIndex + text.length - 1,
         };
+    }
+    function getSelectorAttrs(selector) {
+        const { id, classes } = selector;
+        let attrs = "";
+        if (id)
+            attrs += ` id="${id}"`;
+        if (classes.length)
+            attrs += ` class="${classes.join(" ")}"`;
+        return attrs;
     }
 
     const mdEdit = document.getElementById("md-edit");

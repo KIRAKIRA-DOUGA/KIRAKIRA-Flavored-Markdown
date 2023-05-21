@@ -1,9 +1,12 @@
+const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
+
 export default function parse(html: string): string {
-	const lines = (html + "\n") // 文件末尾空行
+	const lines = (html + "\n".repeat(2)) // 文件末尾空行
+		.replaceAll(/\n{3,}/g, "\n\n") // 移除多余的换行
 		.replaceAll(/<!--.*?-->/g, "") // 移除注释
 		.replaceAll(/</g, "&lt;") // 转义左尖括号/小于号
 		.split("\n");
-	let result = "";
+	const result: string[] = [];
 	let bold = false,
 		italic = false,
 		underline = false,
@@ -14,10 +17,10 @@ export default function parse(html: string): string {
 		inlineCode = false,
 		keyboard = false,
 		spoiler = false,
-		color = false,
 		quoteLayer = 0,
-		stopAddBr = false;
-	const listLayer: ("ul" | "ol")[] = [];
+		addedBr: "" | "p" | "li" = "";
+	const listLayer: ("ul" | "ol")[] = [],
+		spanLayer: ("color" | "attr")[] = [];
 	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
 		let line = lines[lineIndex];
 		let lineResult = "", lineStack = "";
@@ -29,14 +32,18 @@ export default function parse(html: string): string {
 			indent = spaceCount + tabCount * 2;
 			return "";
 		}).trim();
-		if (line.at(-1) === "\\") stopAddBr = true; // 反斜杠在行末尾，表示不换行。
 		// 分割线
 		if (line.match(/^-{3,}$/)) {
-			result += "<hr>\n";
+			result.push("<hr>\n");
 			continue;
 		}
 		let prevFirstChar = "", usedHeading = false, usedList = false, paraTimes = 0;
-		// 段落样式
+		const lastLine = lines[lineIndex - 1]?.replaceAll(">", "").trim(), nextLine = lines[lineIndex + 1]?.replaceAll(">", "").trim();
+		const getQuoteLayer = (s: string | undefined) => countChar(s?.match(/^[>\s]*/)?.[0], ">");
+		const lastQuoteLayer = getQuoteLayer(lines[lineIndex - 1]), nextQuoteLayer = getQuoteLayer(lines[lineIndex + 1]);
+		const paraStart = () => lastQuoteLayer !== quoteLayer || !lastLine || !addedBr,
+			paraEnd = () => nextQuoteLayer !== quoteLayer || !nextLine || !!nextLine.match(ulRegexp) || !!nextLine.match(olRegexp) || !!nextLine.match(headingRegexp);
+		// 段落格式
 		while (true) {
 			const firstChar = line[0];
 			if (prevFirstChar === firstChar || usedHeading) break;
@@ -57,7 +64,6 @@ export default function parse(html: string): string {
 				}
 			// 列表
 			if (firstChar === "*" || "0123456789".includes(firstChar) || listLayer.length && !paraTimes) {
-				const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/;
 				const isUl = !!line.match(ulRegexp), isOl = !!line.match(olRegexp);
 				if (isUl || isOl) {
 					const listIndent = Math.floor(indent / 2) + 1;
@@ -79,18 +85,25 @@ export default function parse(html: string): string {
 						lineResult += "<ol>\n".repeat(differ);
 						listLayer.push(...Array(differ).fill("ol"));
 					}
-					lineResult += "<li>";
-					lineStack = "</li>" + lineStack;
+					if (!addedBr)
+						lineResult += "<li>";
+					if (paraEnd())
+						lineStack = "</li>" + lineStack;
+					else {
+						if (line.at(-1) !== "\\")
+							lineStack = "<br>" + lineStack;
+						addedBr = "li";
+					}
 					usedList = true;
 					if (isUl) line = line.replace(ulRegexp, "");
 					else if (isOl) line = line.replace(olRegexp, "");
-				} else
+				} else if (paraStart())
 					while (listLayer.length)
 						lineResult += `</${listLayer.pop()}>\n`;
 			}
 			// 段落
 			if (firstChar === "#")
-				line = line.replace(/^#+\s+|^#+$/, hash => {
+				line = line.replace(headingRegexp, hash => {
 					const hashCount = hash.trimEnd().length;
 					lineResult += `<h${hashCount}>`;
 					lineStack = `</h${hashCount}>` + lineStack;
@@ -99,19 +112,28 @@ export default function parse(html: string): string {
 				});
 			paraTimes++;
 		}
+		// 普通段落
 		if (!usedHeading && !usedList && line.length !== 0) {
-			lineResult += "<p>";
-			lineStack = "</p>" + lineStack;
+			if (paraStart()) {
+				lineResult += "<p>";
+				addedBr = "";
+			}
+			if (paraEnd()) {
+				lineStack = `</${addedBr || "p"}>` + lineStack;
+				addedBr = "";
+			} else {
+				if (line.at(-1) !== "\\")
+					lineStack = "<br>" + lineStack;
+				addedBr ||= "p";
+			}
 		}
 		line = line.trim();
-		// 段落标签
+		// 块级样式
 		if (line[0] === "{")
 			line = line.replace(/^{[A-Za-z0-9-_.# ]*}\s*/, brace => {
-				const { id, classes } = readSelector(brace);
-				if (lineResult.at(-1) === ">" && lineResult.match(/<[A-Za-z0-9-]+>$/)) {
-					let attrs = "";
-					if (id) attrs += ` id="${id}"`;
-					if (classes.length) attrs += ` class="${classes.join(" ")}"`;
+				const selector = readSelector(brace);
+				if (selector && lineResult.at(-1) === ">" && lineResult.match(/<[A-Za-z0-9-]+>$/)) {
+					const attrs = getSelectorAttrs(selector);
 					lineResult = lineResult.replace(/\b(?=>$)/, attrs);
 				}
 				return "";
@@ -124,6 +146,8 @@ export default function parse(html: string): string {
 				charIndex++;
 				const escaped = line[charIndex];
 				if (escaped === undefined) continue;
+				else if (escaped === "n") // `\n`，表示显式插入一个换行，用于在标题插入换行等迷惑行为。
+					lineResult += "<br>";
 				else if (escaped === "/") // `\/`，表示插入一个 <wbr> 零宽空格，用于拆分语法容易混淆的语句。
 					lineResult += "<wbr>";
 				else if (" *_=~^`!".includes(escaped)) { // 反斜杠后任意个数特殊字符，表示保留这些个数的字符。
@@ -218,17 +242,12 @@ export default function parse(html: string): string {
 				charIndex += 1;
 				continue;
 			}
-			// 颜色
+			// 颜色、行内样式
 			if (tryRead("$", line, charIndex)) {
-				if (color) {
-					color = !color;
-					lineResult += "</span>";
-					continue;
-				}
-				if (tryRead("$\\color{", line, charIndex) && !color) {
-					const brace = readBrace(line, charIndex + 7);
+				if (tryRead("$color{", line, charIndex)) {
+					const brace = readBrace(line, charIndex + "$color".length);
 					if (brace) {
-						color = !color;
+						spanLayer.push("color");
 						charIndex = brace.newIndex;
 						let tag = "<span";
 						const [textColor, backgroundColor] = brace.result;
@@ -240,15 +259,28 @@ export default function parse(html: string): string {
 						lineResult += tag;
 						continue;
 					}
+				} else if (tryRead("$attr{", line, charIndex)) {
+					const selector = readSelector(line, charIndex + "$attr".length);
+					if (selector) {
+						spanLayer.push("attr");
+						charIndex = selector.newIndex;
+						const tag = `<span${getSelectorAttrs(selector)}>`;
+						lineResult += tag;
+						continue;
+					}
+				}
+				if (spanLayer.length) {
+					lineResult += "</span>";
+					spanLayer.pop();
+					continue;
 				}
 			}
 			lineResult += char;
 		}
-		lineResult += lineStack + "\n";
-		stopAddBr = false;
-		result += lineResult;
+		lineResult += lineStack;
+		result.push(lineResult);
 	}
-	return result.replaceAll(/[ \t]+/g, " ");
+	return result.join("\n").replaceAll(/[ \t]+/g, " ").replaceAll(/\n+/g, "\n").replace(/\n+$/, "");
 }
 
 function tryRead(expect: string, text: string, currentIndex: number) {
@@ -264,11 +296,16 @@ function readMultiple(symbol: string, text: string, currentIndex: number) {
 }
 
 function countChar(str: string, char: string) {
+	if (!str) return 0;
 	return (str.match(new RegExp(char, "g")) || []).length;
 }
 
+function checkBraceValid(text: string, currentIndex: number = 0) {
+	return text.slice(currentIndex).match(/^{{(?!{).*?(?<!})}}|^{(?!{).*?(?<!})}/)?.[0];
+}
+
 function readBrace(text: string, currentIndex: number, sep: string = "|") {
-	let brace = text.slice(currentIndex).match(/^{{(?!{).*?(?<!})}}|^{(?!{).*?(?<!})}/)?.[0];
+	let brace = checkBraceValid(text, currentIndex);
 	if (!brace) return null;
 	const newIndex = currentIndex + brace.length - 1;
 	brace = brace.replace(/^{+|}+$/g, "");
@@ -280,9 +317,20 @@ function readBrace(text: string, currentIndex: number, sep: string = "|") {
 	return { result, newIndex };
 }
 
-function readSelector(text: string) {
+function readSelector(text: string, currentIndex: number = 0) {
+	text = checkBraceValid(text, currentIndex);
+	if (!text) return null;
 	return {
 		id: text.match(/#[A-Za-z0-9-_]+/)?.[0].slice(1),
 		classes: [...text.match(/\.[A-Za-z0-9-_]+/g) ?? []].map(i => i.slice(1)),
+		newIndex: currentIndex + text.length - 1,
 	};
+}
+
+function getSelectorAttrs(selector: { id?: string; classes: string[] }) {
+	const { id, classes } = selector;
+	let attrs = "";
+	if (id) attrs += ` id="${id}"`;
+	if (classes.length) attrs += ` class="${classes.join(" ")}"`;
+	return attrs;
 }
