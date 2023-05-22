@@ -1,4 +1,5 @@
 const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
+const ctrlChar = { delete: "\x7f", nbsp: "\xa0" };
 
 export default function parse(html: string): string {
 	const lines = (html + "\n".repeat(2)) // 文件末尾空行
@@ -21,7 +22,8 @@ export default function parse(html: string): string {
 		addedBr: "" | "p" | "li" = "";
 	const listLayer: ("ul" | "ol")[] = [],
 		spanLayer: ("color" | "attr")[] = [],
-		blockCode = { grave: 0, indent: 0 };
+		blockCode = { grave: 0, indent: 0 },
+		bracket: ("" | "a" | "img")[] = [];
 	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
 		let line = lines[lineIndex];
 		let lineResult = "", lineStack = "";
@@ -40,7 +42,7 @@ export default function parse(html: string): string {
 				blockCode.grave = grave;
 				blockCode.indent = indent;
 				const language = line.match(/^`+\s*([^\s`"]+)/)?.[1];
-				result.push(`<pre><code${language ? ` language="${language}"` : ""}>\x7f`);
+				result.push(`<pre><code${language ? ` language="${language}"` : ""}>${ctrlChar.delete}`);
 				continue;
 			} else if (blockCode.grave === grave && line.match(/^`+$/)) {
 				blockCode.grave = 0;
@@ -50,7 +52,7 @@ export default function parse(html: string): string {
 		}
 		if (blockCode.grave) {
 			const codeIndent = Math.max(indent - blockCode.indent, 0);
-			result.push("\xa0".repeat(codeIndent) + line);
+			result.push(ctrlChar.nbsp.repeat(codeIndent) + line);
 			continue;
 		}
 		// 分割线
@@ -308,13 +310,42 @@ export default function parse(html: string): string {
 					continue;
 				}
 			}
+			// 链接、图片
+			// eslint-disable-next-line curly
+			if (tryRead("!", line, charIndex)) {
+				if (tryRead("[", line, charIndex + 1)) {
+					const link = readLink(line, charIndex + 1);
+					if (link) {
+						lineResult += `<img src="${link.href}"${link.alt ? ` alt="${link.alt}"` : ""}>`;
+						charIndex = link.newIndex;
+						continue;
+					}
+				}
+			}
+			if (tryRead("[", line, charIndex)) {
+				const link = readLink(line, charIndex);
+				if (link) {
+					lineResult += `<a href="${link.href || "#"}">`;
+					line = link.newText;
+					bracket.push("a");
+					continue;
+				}
+				bracket.push("");
+			}
+			if (tryRead("]", line, charIndex)) {
+				const lastBracket = bracket.pop();
+				if (lastBracket === "a") {
+					lineResult += "</a>";
+					continue;
+				}
+			}
 			lineResult += char;
 		}
 		lineResult += lineStack;
 		result.push(lineResult);
 	}
 	return result.join("\n")
-		.replaceAll(/\x7f\n/g, "")
+		.replaceAll(ctrlChar.delete + "\n", "")
 		.replaceAll(/[ \t]+/g, " ")
 		.replaceAll(/\n+/g, "\n")
 		.replace(/\n+$/, "");
@@ -370,4 +401,38 @@ function getSelectorAttrs(selector: { id?: string; classes: string[] }) {
 	if (id) attrs += ` id="${id}"`;
 	if (classes.length) attrs += ` class="${classes.join(" ")}"`;
 	return attrs;
+}
+
+function readLink(text: string, currentIndex: number = 0) {
+	let bracket = 1, paren = 0, linkStart = NaN;
+	for (let i = currentIndex + 1; i < text.length; i++) {
+		const char = text[i];
+		if (text[i - 1] === "\\") continue;
+		if (bracket) {
+			if (char === "[") bracket++;
+			else if (char === "]") bracket--;
+		} else {
+			if (!paren) {
+				if (char !== "(") return null;
+				linkStart = i;
+			}
+			if (char === "(") paren++;
+			else if (char === ")") {
+				paren--;
+				if (!paren) {
+					let alt = text.slice(currentIndex + 1, linkStart - 1);
+					alt = alt.trim() ?
+						alt.replaceAll('"', "&quot;").replaceAll(" ", ctrlChar.nbsp).replaceAll(/\\(.)/g, "$1") :
+						"";
+					return {
+						href: encodeURI(text.slice(linkStart + 1, i).replaceAll(/\\(.)/g, "$1")),
+						alt,
+						newText: text.slice(0, linkStart) + text.slice(i + 1),
+						newIndex: i,
+					};
+				}
+			}
+		}
+	}
+	return null;
 }
