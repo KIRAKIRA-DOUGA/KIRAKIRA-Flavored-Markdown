@@ -14,7 +14,7 @@
             .split("\n");
         const result = [];
         let bold = false, italic = false, underline = false, highlight = false, superscript = false, subscript = false, strikethrough = false, inlineCode = false, keyboard = false, spoiler = false, quoteLayer = 0, addedBr = "";
-        const listLayer = [], spanLayer = [];
+        const listLayer = [], spanLayer = [], blockCode = { grave: 0, indent: 0 };
         for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
             let line = lines[lineIndex];
             let lineResult = "", lineStack = "";
@@ -23,12 +23,33 @@
             line = line.replace(/^\s+/, indentSpace => {
                 const spaceCount = countChar(indentSpace, " ");
                 const tabCount = countChar(indentSpace, "\t");
-                indent = spaceCount + tabCount * 2;
+                indent = spaceCount + tabCount * (blockCode.grave ? 4 : 2);
                 return "";
             }).trim();
+            // 块级代码
+            if (line.match(/^`{3,}/)) {
+                const grave = readMultiple("`", line, 0);
+                if (!blockCode.grave) {
+                    blockCode.grave = grave;
+                    blockCode.indent = indent;
+                    const language = line.match(/^`+\s*([^\s`"]+)/)?.[1];
+                    result.push(`<pre><code${language ? ` language="${language}"` : ""}>\x7f`);
+                    continue;
+                }
+                else if (blockCode.grave === grave && line.match(/^`+$/)) {
+                    blockCode.grave = 0;
+                    result.push("</code></pre>");
+                    continue;
+                }
+            }
+            if (blockCode.grave) {
+                const codeIndent = Math.max(indent - blockCode.indent, 0);
+                result.push("\xa0".repeat(codeIndent) + line);
+                continue;
+            }
             // 分割线
             if (line.match(/^-{3,}$/)) {
-                result.push("<hr>\n");
+                result.push("<hr>");
                 continue;
             }
             let prevFirstChar = "", usedHeading = false, usedList = false, paraTimes = 0;
@@ -142,6 +163,18 @@
             // 行内文字格式
             for (let charIndex = 0; charIndex < line.length; charIndex++) {
                 const char = line[charIndex];
+                // 不带转义的行内代码
+                const grave = readMultiple("`", line, charIndex);
+                if (grave >= 3) {
+                    const graveText = "`".repeat(grave);
+                    const code = line.slice(charIndex).match(new RegExp(`^${graveText}(?<content>.*?)${graveText}`));
+                    if (code?.groups?.content) {
+                        const { content } = code.groups;
+                        lineResult += `<code>${content}</code>`;
+                        charIndex += code[0].length - 1;
+                        continue;
+                    }
+                }
                 // 转义
                 if (tryRead("\\", line, charIndex)) {
                     charIndex++;
@@ -289,7 +322,11 @@
             lineResult += lineStack;
             result.push(lineResult);
         }
-        return result.join("\n").replaceAll(/[ \t]+/g, " ").replaceAll(/\n+/g, "\n").replace(/\n+$/, "");
+        return result.join("\n")
+            .replaceAll(/\x7f\n/g, "")
+            .replaceAll(/[ \t]+/g, " ")
+            .replaceAll(/\n+/g, "\n")
+            .replace(/\n+$/, "");
     }
     function tryRead(expect, text, currentIndex) {
         return text.slice(currentIndex).startsWith(expect);
