@@ -5,7 +5,7 @@
 (function () {
     'use strict';
 
-    const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
+    const ulRegexp = /^\*( |$)/, olRegexp = /^\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
     const ctrlChar = { delete: "\x7f", nbsp: "\xa0" };
     function parse(html) {
         const lines = (html + "\n".repeat(2)) // 文件末尾空行

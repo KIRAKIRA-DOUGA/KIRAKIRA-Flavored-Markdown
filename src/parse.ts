@@ -1,4 +1,4 @@
-const ulRegexp = /\*( |$)/, olRegexp = /\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
+const ulRegexp = /^\*( |$)/, olRegexp = /^\d+\.( |$)/, headingRegexp = /^#+\s+|^#+$/;
 const ctrlChar = { delete: "\x7f", nbsp: "\xa0" };
 
 export default function parse(html: string): string {
